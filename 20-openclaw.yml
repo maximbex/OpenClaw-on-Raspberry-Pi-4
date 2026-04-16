@@ -1,4 +1,74 @@
 # From 20-openclaw.yml
-- name: Enable lingering for openclaw user
-  command: "loginctl enable-linger {{ openclaw_user }}"
-  changed_when: false
+#- name: Enable lingering for openclaw user
+ # command: "loginctl enable-linger {{ openclaw_user }}"
+  #changed_when: false
+
+
+
+  ---
+- name: Deploy the OpenClaw Daemon
+  hosts: pi_openclaw
+  become: true
+  vars_files:
+    - group_vars/secrets.yml
+
+  tasks:
+    - name: Install OpenClaw globally
+      community.general.npm:
+        name: "{{ openclaw_npm_package }}"
+        global: true
+        state: present
+
+    - name: Deploy encrypted API keys to the OpenClaw environment
+      template:
+        src: templates/openclaw.env.j2
+        dest: "{{ openclaw_home }}/.env"
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0600'
+
+    - name: Enable systemd lingering for openclaw user
+      command: "loginctl enable-linger {{ openclaw_user }}"
+      changed_when: false
+
+    - name: Create user-space systemd directory
+      file:
+        path: "{{ openclaw_home }}/.config/systemd/user"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0755'
+
+    - name: Craft the user-space systemd service for OpenClaw
+      copy:
+        dest: "{{ openclaw_home }}/.config/systemd/user/openclaw.service"
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        content: |
+          [Unit]
+          Description=OpenClaw Autonomous Agent
+          After=network-online.target
+          
+          [Service]
+          Type=simple
+          WorkingDirectory={{ openclaw_home }}
+          # Loads the secure env file
+          EnvironmentFile={{ openclaw_home }}/.env
+          ExecStart=/usr/bin/node /usr/lib/node_modules/openclaw/index.js
+          Restart=always
+          RestartSec=10
+          Environment=NODE_ENV=production
+          
+          [Install]
+          WantedBy=default.target
+
+    - name: Enable and start OpenClaw user service
+      become_user: "{{ openclaw_user }}"
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default('1001') }}"
+      systemd:
+        scope: user
+        daemon_reload: yes
+        name: openclaw
+        enabled: yes
+        state: restarted
