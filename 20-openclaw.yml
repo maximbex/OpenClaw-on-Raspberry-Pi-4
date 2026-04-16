@@ -65,7 +65,7 @@
     - name: Enable and start OpenClaw user service
       become_user: "{{ openclaw_user }}"
       environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default('1001') }}"
+        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default('1001') }}" # code = 3h4
       systemd:
         scope: user
         daemon_reload: yes
