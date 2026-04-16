@@ -1,0 +1,60 @@
+---
+- name: Bootstrap Raspberry Pi for OpenClaw
+  hosts: pi_openclaw
+  become: true
+  gather_facts: true
+
+  tasks:
+    - name: Set gpu_mem to 16MB in boot config (Reclaiming VideoCore RAM)
+      lineinfile:
+        path: /boot/config.txt
+        regexp: '^gpu_mem='
+        line: 'gpu_mem=16'
+        state: present
+
+    - name: Disable dphys-swapfile to protect SD/SSD
+      systemd:
+        name: dphys-swapfile
+        enabled: no
+        state: stopped
+      ignore_errors: yes
+
+    - name: Update apt cache and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
+        cache_valid_time: 3600
+
+    - name: Install common packages and build tools
+      apt:
+        name: 
+          - build-essential
+          - python3
+          - git
+          - curl
+          - htop
+        state: present
+
+    - name: Add NodeSource repository for Node.js {{ node_version }}
+      shell: "curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | bash -"
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js
+      apt:
+        name: nodejs
+        state: present
+
+    - name: Create openclaw group
+      group:
+        name: "{{ openclaw_group }}"
+        state: present
+
+    - name: Create restricted openclaw user
+      user:
+        name: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        shell: /bin/bash
+        create_home: yes
+        home: "{{ openclaw_home }}"
+        state: present
