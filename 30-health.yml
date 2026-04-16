@@ -1,0 +1,97 @@
+---
+- name: Comprehensive Pi 4 + OpenClaw + NFS Health
+  hosts: pi_openclaw
+  become: true
+  gather_facts: true
+
+  tasks:
+    # Hardware telemetry (from attachment)
+    - name: Read throttling status
+      command: vcgencmd get_throttled
+      register: throttled
+      changed_when: false
+      failed_when: false
+
+    - name: Read temperature
+      command: vcgencmd measure_temp
+      register: temp
+      changed_when: false
+
+    - name: Read voltage
+      command: vcgencmd measure_volts
+      register: volts
+      changed_when: false
+
+    # Memory pressure (our ZRAM focus)
+    - name: Check ZRAM status
+      command: zramctl --output-all
+      register: zram_status
+      changed_when: false
+      failed_when: false
+
+    - name: Check memory availability
+      command: free -h
+      register: memory
+      changed_when: false
+
+    # NFS-specific health (our bridge)
+    - name: Check NFS mount
+      command: findmnt {{ nfs_mount_point }}
+      register: nfs_mounted
+      changed_when: false
+      failed_when: false
+
+    - name: Test NFS write latency
+      shell: |
+        dd if=/dev/zero of={{ nfs_mount_point }}/.latency_test bs=4k count=1000 conv=fsync 2>&1 | grep copied
+        rm -f {{ nfs_mount_point }}/.latency_test
+      register: nfs_latency
+      changed_when: false
+      failed_when: false
+      when: nfs_mounted.rc == 0
+
+    - name: Check NFS cache (fsc) status
+      command: cat /proc/fs/nfsfs/servers
+      register: nfs_cache
+      changed_when: false
+      failed_when: false
+
+    # OpenClaw process health
+    - name: Check OpenClaw gateway process
+      command: pgrep -f "openclaw-gateway"
+      register: openclaw_pid
+      changed_when: false
+      failed_when: false
+
+    - name: Get OpenClaw connections
+      shell: |
+        ss -tulpn | grep {{ openclaw_gateway_port }} || echo "Not listening"
+      register: openclaw_ports
+      changed_when: false
+
+    # Unified report
+    - name: Print crystalline summary
+      debug:
+        msg:
+          - "╔════════════════════════════════════════════════════════════╗"
+          - "║  PI 4 HARDWARE STATE                                       ║"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  Temperature:  {{ temp.stdout | default('n/a') | regex_replace('temp=', '') | regex_replace(\"'C\", '°C') }}"
+          - "║  Throttling:   {{ 'YES - CHECK COOLING' if 'throttled=0x0' not in throttled.stdout else 'None' }}"
+          - "║  Voltage:      {{ volts.stdout | default('n/a') | regex_replace('volt=', '') }}"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  MEMORY ARCHITECTURE                                       ║"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  {{ memory.stdout.split('\n') | join('\n║  ') }}"
+          - "║  ZRAM: {{ zram_status.stdout_lines[1] | default('Not active') if zram_status.stdout else 'Not active' }}"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  NFS BRIDGE STATUS                                         ║"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  Mount:     {{ '✓ Connected' if nfs_mounted.rc == 0 else '✗ Disconnected' }}"
+          - "║  Write:     {{ nfs_latency.stdout | default('N/A') }}"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  OPENCLAW GATEWAY                                          ║"
+          - "╠════════════════════════════════════════════════════════════╣"
+          - "║  Process:   {{ '✓ Running (PID ' ~ openclaw_pid.stdout ~ ')' if openclaw_pid.rc == 0 else '✗ Not running' }}"
+          - "║  Port:      {{ openclaw_ports.stdout | default('N/A') }}"
+          - "╚════════════════════════════════════════════════════════════╝"

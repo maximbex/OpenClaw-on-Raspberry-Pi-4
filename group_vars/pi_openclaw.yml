@@ -1,3 +1,5 @@
+# In group_vars/pi_openclaw.yml
+
 ---
 # ---------------------------------------------------------
 # IDENTITY & SECURITY
@@ -12,8 +14,11 @@ openclaw_home: /home/openclaw
 nas_host: "192.168.1.100" # Replace with your Synology NAS IP
 nfs_export_path: "/volume1/openclaw-data" # The path on your NAS
 nfs_mount_point: "{{ openclaw_home }}/data"
+
 # Strict permissions ensuring only the agent can read/write its memories
-nfs_mount_opts: "rw,hard,intr,nconnect=16,rsize=1048576,wsize=1048576,timeo=600,retrans=2"
+# NFS mount owned by openclaw user
+nfs_mount_opts: "rw,hard,intr,nconnect=16,rsize=1048576,wsize=1048576,timeo=600,retrans=2,uid={{ openclaw_uid }},gid={{ openclaw_gid }}"
+
 
 # ---------------------------------------------------------
 # THE FOLD (Mathematical RAM Expansion)
@@ -26,3 +31,8 @@ zram_algo: zstd
 # ---------------------------------------------------------
 node_version: "22.x"
 openclaw_npm_package: "openclaw@latest"
+
+
+
+
+

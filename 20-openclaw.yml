@@ -1,0 +1,4 @@
+# From 20-openclaw.yml
+- name: Enable lingering for openclaw user
+  command: "loginctl enable-linger {{ openclaw_user }}"
+  changed_when: false
