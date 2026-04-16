@@ -1,0 +1,38 @@
+---
+- name: Configure Local Tiered Storage (Alternative to NFS)
+  hosts: pi_openclaw
+  become: true
+
+  vars:
+    local_mount_point: "{{ openclaw_home }}/data"
+
+  tasks:
+    - name: Create local data directory
+      file:
+        path: "{{ local_mount_point }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0750'
+
+    - name: Install ZRAM utilities
+      apt:
+        name: zram-tools
+        state: present
+
+    - name: Configure standard ZRAM (50% allocation)
+      lineinfile:
+        path: /etc/default/zramswap
+        regexp: '^{{ item.key }}'
+        line: '{{ item.key }}={{ item.value }}'
+        create: yes
+      loop:
+        - { key: 'ALGO', value: 'lz4' }
+        - { key: 'PERCENT', value: '50' }
+      notify: Restart ZRAM
+
+  handlers:
+    - name: Restart ZRAM
+      systemd:
+        name: zramswap
+        state: restarted
