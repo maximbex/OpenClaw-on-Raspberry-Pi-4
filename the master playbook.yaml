@@ -1,0 +1,160 @@
+---
+- name: Architecting the Stateless OpenClaw Gateway
+  hosts: pi
+  become: yes
+  vars:
+    # Ecosystem Variables
+    synology_ip: "192.168.1.100" # Replace with your NAS IP
+    nfs_export_path: "/volume1/OpenClawArchive" # Replace with your NAS path
+    openclaw_dir: "/opt/openclaw"
+    node_version: "22.x"
+
+  vars_files:
+    - secrets.yml
+
+  tasks:
+    # ---------------------------------------------------------
+    # MOVEMENT 0: BASE OS & NETWORK TUNING
+    # ---------------------------------------------------------
+    - name: Set gpu_mem to 16MB in boot config (Reclaiming VideoCore RAM)
+      lineinfile:
+        path: /boot/config.txt
+        regexp: '^gpu_mem='
+        line: 'gpu_mem=16'
+        state: present
+      notify: Reboot required
+
+    - name: Disable dphys-swapfile to protect SD/SSD
+      systemd:
+        name: dphys-swapfile
+        enabled: no
+        state: stopped
+      ignore_errors: yes
+
+    - name: Optimize Network Stack for NFS (BBR & Socket Expansion)
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.core.rmem_max', value: '134217728' }
+        - { name: 'net.core.wmem_max', value: '134217728' }
+        - { name: 'net.ipv4.tcp_rmem', value: '4096 87380 134217728' }
+        - { name: 'net.ipv4.tcp_wmem', value: '4096 65536 134217728' }
+        - { name: 'net.core.netdev_max_backlog', value: '30000' }
+        - { name: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
+        - { name: 'vm.swappiness', value: '5' }
+        - { name: 'vm.vfs_cache_pressure', value: '25' }
+
+    # ---------------------------------------------------------
+    # MOVEMENT 1: THE FOLD (ZRAM & SQLite RAM Disk)
+    # ---------------------------------------------------------
+    - name: Install ZRAM utilities
+      apt:
+        name: zram-tools
+        state: present
+        update_cache: yes
+
+    - name: Configure aggressive ZRAM for NFS topology (75% allocation, ZSTD)
+      lineinfile:
+        path: /etc/default/zramswap
+        regexp: '^{{ item.key }}'
+        line: '{{ item.key }}={{ item.value }}'
+        create: yes
+      loop:
+        - { key: 'ALGO', value: 'zstd' }
+        - { key: 'PERCENT', value: '75' }
+      notify: Restart ZRAM
+
+    - name: Set global SQLite temp directory to local RAM
+      lineinfile:
+        path: /etc/environment
+        line: 'SQLITE_TMPDIR=/dev/shm'
+        state: present
+
+    # ---------------------------------------------------------
+    # MOVEMENT 2: THE BRIDGE (Bypassing USB via Synology NFS)
+    # ---------------------------------------------------------
+    - name: Ensure NFS client libraries are present
+      apt:
+        name: nfs-common
+        state: present
+
+    - name: Create local mount point for persistent data
+      file:
+        path: "{{ openclaw_dir }}/data"
+        state: directory
+        mode: '0755'
+
+    - name: Mount Synology NAS directory persistently via fstab
+      mount:
+        path: "{{ openclaw_dir }}/data"
+        src: "{{ synology_ip }}:{{ nfs_export_path }}"
+        fstype: nfs
+        opts: rw,nfsvers=4.1,hard,timeo=600,retrans=2,noresvport
+        state: mounted
+
+    # ---------------------------------------------------------
+    # MOVEMENT 3: THE ENGINE (Node.js & The Secure Daemon)
+    # ---------------------------------------------------------
+    - name: Add NodeSource repository for Node.js {{ node_version }}
+      shell: "curl -fsSL https://deb.nodesource.com/setup_{{ node_version }} | bash -"
+      args:
+        creates: /etc/apt/sources.list.d/nodesource.list
+
+    - name: Install Node.js, Build Essentials, and Git
+      apt:
+        name: 
+          - nodejs
+          - build-essential
+          - python3
+          - git
+        state: present
+
+    - name: Deploy encrypted API keys to the OpenClaw environment
+      template:
+        src: openclaw_env.j2
+        dest: "{{ openclaw_dir }}/.env"
+        owner: root
+        mode: '0600'
+      notify: Reload systemd and restart OpenClaw
+
+    - name: Craft the systemd service for OpenClaw
+      copy:
+        dest: /etc/systemd/system/openclaw.service
+        content: |
+          [Unit]
+          Description=OpenClaw Autonomous Agent
+          After=network-online.target nfs-client.target
+          Wants=network-online.target
+          
+          [Service]
+          Type=simple
+          User=root
+          WorkingDirectory={{ openclaw_dir }}
+          ExecStart=/usr/bin/node {{ openclaw_dir }}/index.js
+          Restart=always
+          RestartSec=10
+          Environment=NODE_ENV=production
+          
+          [Install]
+          WantedBy=multi-user.target
+      notify: Reload systemd and restart OpenClaw
+
+  handlers:
+    - name: Reboot required
+      debug:
+        msg: "REBOOT REQUIRED: Run 'sudo reboot' to apply gpu_mem changes."
+
+    - name: Restart ZRAM
+      systemd:
+        name: zramswap
+        state: restarted
+
+    - name: Reload systemd and restart OpenClaw
+      systemd:
+        daemon_reload: yes
+        name: openclaw
+        state: restarted
+        enabled: yes
