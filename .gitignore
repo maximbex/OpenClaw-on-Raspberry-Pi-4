@@ -1,18 +1,31 @@
-# Build and Release Folders
-bin-debug/
-bin-release/
-[Oo]bj/
-[Bb]in/
+# **\---------------------------------------------------------**
 
-# Other files and folders
-.settings/
+# **MAC OS ARTIFACTS**
 
-# Executables
-*.swf
-*.air
-*.ipa
-*.apk
+# **\---------------------------------------------------------**
 
-# Project files, i.e. `.project`, `.actionScriptProperties` and `.flexProperties`
-# should NOT be excluded as they contain compiler settings and other important
-# information for Eclipse / Flash Builder.
+.DS\_Store  
+.AppleDouble  
+.LSOverride
+
+# **\---------------------------------------------------------**
+
+# **ANSIBLE SPECIFIC**
+
+# **\---------------------------------------------------------**
+
+\*.retry  
+\*.log
+
+# **\---------------------------------------------------------**
+
+# **THE COGNITIVE KEYS (ABSOLUTE PRIORITY)**
+
+# **\---------------------------------------------------------**
+
+group\_vars/secrets.yml
+
+# **Also ignore any backup files your text editor might make**
+
+\*\~  
+\*.swp
