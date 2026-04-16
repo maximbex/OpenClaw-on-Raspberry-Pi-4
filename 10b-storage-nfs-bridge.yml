@@ -1,0 +1,69 @@
+---
+- name: Architect the NFS Bridge and ZRAM
+  hosts: pi_openclaw
+  become: true
+
+  tasks:
+    - name: Optimize Network Stack for NFS (BBR & Socket Expansion)
+      sysctl:
+        name: "{{ item.name }}"
+        value: "{{ item.value }}"
+        state: present
+        reload: yes
+      loop:
+        - { name: 'net.core.rmem_max', value: '134217728' }
+        - { name: 'net.core.wmem_max', value: '134217728' }
+        - { name: 'net.ipv4.tcp_rmem', value: '4096 87380 134217728' }
+        - { name: 'net.ipv4.tcp_wmem', value: '4096 65536 134217728' }
+        - { name: 'net.core.netdev_max_backlog', value: '30000' }
+        - { name: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
+        - { name: 'vm.swappiness', value: '5' }
+        - { name: 'vm.vfs_cache_pressure', value: '25' }
+
+    - name: Install ZRAM & NFS Client
+      apt:
+        name: 
+          - zram-tools
+          - nfs-common
+        state: present
+
+    - name: Configure Aggressive ZRAM ({{ zram_percent }}% allocation)
+      lineinfile:
+        path: /etc/default/zramswap
+        regexp: '^{{ item.key }}'
+        line: '{{ item.key }}={{ item.value }}'
+        create: yes
+      loop:
+        - { key: 'ALGO', value: '{{ zram_algo }}' }
+        - { key: 'PERCENT', value: '{{ zram_percent }}' }
+      notify: Restart ZRAM
+
+    - name: Create SQLite RAM temp directory
+      file:
+        path: /dev/shm/openclaw-tmp
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0750'
+
+    - name: Create local mount point for persistent NAS data
+      file:
+        path: "{{ nfs_mount_point }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0750'
+
+    - name: Mount Synology NAS directly via fstab
+      mount:
+        path: "{{ nfs_mount_point }}"
+        src: "{{ nas_host }}:{{ nfs_export_path }}"
+        fstype: nfs
+        opts: "{{ nfs_mount_opts }}"
+        state: mounted
+
+  handlers:
+    - name: Restart ZRAM
+      systemd:
+        name: zramswap
+        state: restarted
