@@ -51,13 +51,18 @@
         - { key: 'PERCENT', value: '{{ zram_percent }}' }
       notify: Restart ZRAM
 
-    - name: Create SQLite RAM temp directory
-      file:
-        path: /dev/shm/openclaw-tmp
-        state: directory
-        owner: "{{ openclaw_user }}"
-        group: "{{ openclaw_group }}"
-        mode: '0750'
+    - name: Configure OpenClaw tmpfiles rule
+      copy:
+        dest: /etc/tmpfiles.d/openclaw.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          d {{ openclaw_sqlite_tmpdir }} 0750 {{ openclaw_user }} {{ openclaw_group }} -
+
+    - name: Apply OpenClaw tmpfiles rule
+      command: systemd-tmpfiles --create /etc/tmpfiles.d/openclaw.conf
+      changed_when: false
 
     - name: Create NFS mount point for OpenClaw state
       file:
