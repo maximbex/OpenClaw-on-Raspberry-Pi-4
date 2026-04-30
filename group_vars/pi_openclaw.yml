@@ -25,6 +25,7 @@ nfs_mount_opts: "rw,hard,intr,nconnect=16,rsize=1048576,wsize=1048576,timeo=600,
 # ---------------------------------------------------------
 zram_percent: 75
 zram_algo: zstd
+openclaw_sqlite_tmpdir: /dev/shm/openclaw-tmp
 
 # ---------------------------------------------------------
 # THE COGNITIVE ENGINE
