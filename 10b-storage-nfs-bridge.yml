@@ -2,6 +2,7 @@
 - name: Architect the NFS Bridge and ZRAM
   hosts: pi_openclaw
   become: true
+  gather_facts: false
 
   tasks:
     - name: Fail if NAS host is still a placeholder
