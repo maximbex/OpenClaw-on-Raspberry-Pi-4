@@ -35,9 +35,10 @@ Giving a web-connected LLM agent root access is structurally dissonant.
    ansible-playbook 00-preflight.yml  
 5. Create your encrypted vault for your API keys:  
    ansible-vault create group\_vars/secrets.yml  
-6. Execute the symphony:  
-   ansible-playbook \-i inventory.ini 00-bootstrap.yml \--ask-vault-pass (Repeat for the remaining playbooks).
-7. After 20-openclaw.yml completes, finish OpenClaw setup interactively as the runtime user:  
+6. Choose one storage path: local storage (`10-storage-local.yml`) or NFS bridge (`10b-storage-nfs-bridge.yml`). Both target OpenClaw's state directory, `/home/openclaw/.openclaw` by default.
+7. Execute the symphony:  
+   ansible-playbook \-i inventory.ini 00-bootstrap.yml \--ask-vault-pass (then run exactly one storage playbook before `20-openclaw.yml`).
+8. After 20-openclaw.yml completes, finish OpenClaw setup interactively as the runtime user:  
    sudo \-i \-u openclaw  
    openclaw onboard \--install-daemon
 
