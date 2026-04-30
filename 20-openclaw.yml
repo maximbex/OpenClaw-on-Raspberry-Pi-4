@@ -28,15 +28,15 @@
         group: "{{ openclaw_group }}"
         mode: "{{ item.mode }}"
       loop:
-        - { path: "{{ openclaw_config_dir }}", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/sessions", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/credentials", mode: '0700' }
-        - { path: "{{ openclaw_config_dir }}/data", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/logs", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/agents", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/agents/main", mode: '0755' }
-        - { path: "{{ openclaw_config_dir }}/agents/main/agent", mode: '0700' }
-        - { path: "{{ openclaw_config_dir }}/workspace", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/sessions", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/credentials", mode: '0700' }
+        - { path: "{{ openclaw_state_dir }}/data", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/logs", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/agents", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/agents/main", mode: '0755' }
+        - { path: "{{ openclaw_state_dir }}/agents/main/agent", mode: '0700' }
+        - { path: "{{ openclaw_state_dir }}/workspace", mode: '0755' }
 
     - name: Create pnpm directories
       file:
@@ -64,6 +64,7 @@
       become_user: "{{ openclaw_user }}"
       environment:
         HOME: "{{ openclaw_home }}"
+        OPENCLAW_STATE_DIR: "{{ openclaw_state_dir }}"
         PNPM_HOME: "{{ pnpm_home }}"
         PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
       shell: |
@@ -95,6 +96,7 @@
         marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw"
         block: |
           export PNPM_HOME="{{ pnpm_home }}"
+          export OPENCLAW_STATE_DIR="{{ openclaw_state_dir }}"
           export PATH="{{ pnpm_global_bin_dir }}:$PNPM_HOME:$PATH"
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
         create: true
@@ -116,7 +118,7 @@
     - name: Deploy encrypted API keys to the OpenClaw environment
       template:
         src: templates/openclaw.env.j2
-        dest: "{{ openclaw_home }}/.env"
+        dest: "{{ openclaw_state_dir }}/.env"
         owner: "{{ openclaw_user }}"
         group: "{{ openclaw_group }}"
         mode: '0600'
@@ -126,6 +128,7 @@
       become_user: "{{ openclaw_user }}"
       environment:
         HOME: "{{ openclaw_home }}"
+        OPENCLAW_STATE_DIR: "{{ openclaw_state_dir }}"
         PNPM_HOME: "{{ pnpm_home }}"
         PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
       command: "pnpm install -g {{ openclaw_package }}"
@@ -136,6 +139,7 @@
       become_user: "{{ openclaw_user }}"
       environment:
         HOME: "{{ openclaw_home }}"
+        OPENCLAW_STATE_DIR: "{{ openclaw_state_dir }}"
         PNPM_HOME: "{{ pnpm_home }}"
         PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
       command: openclaw --version
@@ -150,6 +154,7 @@
       debug:
         msg:
           - "OpenClaw CLI installed: {{ openclaw_version.stdout }}"
+          - "OpenClaw state dir: {{ openclaw_state_dir }}"
           - "Next manual step:"
           - "sudo -i -u {{ openclaw_user }}"
           - "openclaw onboard --install-daemon"
