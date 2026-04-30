@@ -4,6 +4,18 @@
   become: true
 
   tasks:
+    - name: Fail if NAS host is still a placeholder
+      assert:
+        that:
+          - nas_host is defined
+          - nas_host not in nfs_placeholder_hosts
+          - nfs_export_path is defined
+          - nfs_export_path | length > 0
+          - nfs_mount_point == openclaw_state_dir
+        fail_msg: >-
+          Configure nas_host/nfs_export_path before running the NFS bridge.
+          nfs_mount_point must remain aligned with openclaw_state_dir so OpenClaw state is backed by NFS.
+
     - name: Optimize Network Stack for NFS (BBR & Socket Expansion)
       sysctl:
         name: "{{ item.name }}"
@@ -46,7 +58,7 @@
         group: "{{ openclaw_group }}"
         mode: '0750'
 
-    - name: Create local mount point for persistent NAS data
+    - name: Create NFS mount point for OpenClaw state
       file:
         path: "{{ nfs_mount_point }}"
         state: directory
