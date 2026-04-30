@@ -5,9 +5,30 @@
   gather_facts: true
 
   tasks:
+    - name: Check modern Raspberry Pi boot config path
+      stat:
+        path: /boot/firmware/config.txt
+      register: boot_firmware_config
+
+    - name: Check legacy Raspberry Pi boot config path
+      stat:
+        path: /boot/config.txt
+      register: boot_legacy_config
+
+    - name: Select active Raspberry Pi boot config path
+      set_fact:
+        raspi_boot_config_path: >-
+          {{ '/boot/firmware/config.txt' if boot_firmware_config.stat.exists else
+             '/boot/config.txt' if boot_legacy_config.stat.exists else '' }}
+
+    - name: Fail if no Raspberry Pi boot config exists
+      fail:
+        msg: "No Raspberry Pi boot config found at /boot/firmware/config.txt or /boot/config.txt"
+      when: raspi_boot_config_path | length == 0
+
     - name: Set gpu_mem to 16MB in boot config (Reclaiming VideoCore RAM)
       lineinfile:
-        path: /boot/config.txt
+        path: "{{ raspi_boot_config_path }}"
         regexp: '^gpu_mem='
         line: 'gpu_mem=16'
         state: present
