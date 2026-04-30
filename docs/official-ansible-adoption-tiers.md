@@ -15,6 +15,62 @@ This repo is not trying to become a blind copy of the official installer. The go
 - Low-privilege OpenClaw runtime user.
 - Health playbook tailored to Pi thermals, throttling, memory pressure, NFS, and service state.
 
+## Minimum Starting Assumptions
+
+These assumptions define the clean starting point for this repo. If any of them are false, pause and make the deviation explicit before running the playbooks.
+
+### Control Machine
+
+- Ansible runs from a control machine, not from the Pi itself.
+- The control machine has this repo cloned and can reach the Pi over SSH.
+- Ansible 2.14+ is available.
+- Required collections are installed from `requirements.yml`.
+- SSH key-based login to the Pi works for the inventory user.
+- The inventory user can become root with sudo.
+
+### Raspberry Pi Target
+
+- Raspberry Pi 4 with 64-bit Raspberry Pi OS / Debian, or another Debian 11+ / Ubuntu 20.04+ target.
+- Python 3 is installed at the inventory path, currently `/usr/bin/python3`.
+- The Pi has internet access for apt, NodeSource, npm/pnpm, and OpenClaw package installation.
+- The Pi has stable power, wired networking if possible, and enough free disk for package installation.
+- The active boot config path is detected or set correctly. On the current Pi it is `/boot/firmware/config.txt`.
+- The target is preferably fresh: no existing OpenClaw user, service, data directory, Docker setup, firewall policy, or Tailscale state unless we are deliberately migrating.
+
+### Storage And NAS
+
+- If using the NFS bridge, the NAS already exists, is reachable from the Pi, and exports the configured path.
+- NFS permissions are planned before mounting. The OpenClaw runtime user must be able to read/write persistent data.
+- If NFS is not ready, use the local-storage playbook path intentionally instead of half-configuring both.
+- SQLite temp/scratch storage should stay local/RAM-backed; persistent memory can live on NFS.
+
+### Secrets And Onboarding
+
+- API keys and provider tokens belong in `group_vars/secrets.yml`, encrypted with Ansible Vault.
+- The vault file should not be committed.
+- Installing OpenClaw is not the full setup. The official flow still expects onboarding/configuration as the `openclaw` user.
+- Messaging provider login should happen from the `openclaw` account, not from the admin SSH user.
+
+### Safety Checks Before Mutating The Pi
+
+- `ansible -i inventory.ini pi_openclaw -m ping` returns `pong`.
+- `ansible -i inventory.ini pi_openclaw -b -m command -a 'id'` returns `uid=0(root)`.
+- Syntax checks pass for all playbooks we intend to run.
+- Firewall changes are not enabled until the remote access path is clear.
+- Existing data is backed up or intentionally ignored before changing storage mounts.
+
+### Current Verified Host State
+
+As of 2026-04-30, the current Pi target was verified as:
+
+- Host: `rpi4a` at `192.168.178.101`.
+- Inventory user: `maxadmin`.
+- OS: Debian 13.4 `trixie`, aarch64.
+- Kernel: Raspberry Pi 6.12 series.
+- Active boot config: `/boot/firmware/config.txt`.
+- Ansible SSH and sudo escalation: working.
+- OpenClaw, Node.js, npm, pnpm, Docker, UFW, fail2ban, Tailscale, and `/home/openclaw`: not yet installed.
+
 ## A. Must Keep From The Official Repo
 
 These are compatibility and correctness items. If we ignore them, we risk fighting OpenClaw packaging or runtime assumptions.
