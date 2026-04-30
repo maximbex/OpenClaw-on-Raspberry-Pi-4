@@ -1,16 +1,117 @@
 ---
-- name: Deploy the OpenClaw Daemon
+- name: Install OpenClaw CLI
   hosts: pi_openclaw
   become: true
   vars_files:
     - group_vars/secrets.yml
 
   tasks:
-    - name: Install OpenClaw globally
-      community.general.npm:
-        name: "{{ openclaw_npm_package }}"
-        global: true
-        state: present
+    - name: Validate supported OpenClaw install mode
+      assert:
+        that:
+          - openclaw_install_mode == 'release'
+        fail_msg: "This playbook currently supports only openclaw_install_mode=release"
+
+    - name: Ensure OpenClaw home exists
+      file:
+        path: "{{ openclaw_home }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0755'
+
+    - name: Create OpenClaw config directories
+      file:
+        path: "{{ item.path }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: "{{ item.mode }}"
+      loop:
+        - { path: "{{ openclaw_config_dir }}", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/sessions", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/credentials", mode: '0700' }
+        - { path: "{{ openclaw_config_dir }}/data", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/logs", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/agents", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/agents/main", mode: '0755' }
+        - { path: "{{ openclaw_config_dir }}/agents/main/agent", mode: '0700' }
+        - { path: "{{ openclaw_config_dir }}/workspace", mode: '0755' }
+
+    - name: Create pnpm directories
+      file:
+        path: "{{ item }}"
+        state: directory
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0755'
+      loop:
+        - "{{ pnpm_home }}"
+        - "{{ pnpm_home }}/store"
+        - "{{ pnpm_global_bin_dir }}"
+
+    - name: Check if pnpm is installed
+      command: pnpm --version
+      register: pnpm_check
+      changed_when: false
+      failed_when: false
+
+    - name: Install pnpm globally
+      command: npm install -g pnpm
+      when: pnpm_check.rc != 0
+
+    - name: Configure pnpm for openclaw user
+      become_user: "{{ openclaw_user }}"
+      environment:
+        HOME: "{{ openclaw_home }}"
+        PNPM_HOME: "{{ pnpm_home }}"
+        PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
+      shell: |
+        set -e
+        current_global_dir="$(pnpm config get global-dir 2>/dev/null || true)"
+        current_bin_dir="$(pnpm config get global-bin-dir 2>/dev/null || true)"
+        changed=0
+
+        if [ "$current_global_dir" != "{{ pnpm_home }}" ]; then
+          pnpm config set global-dir "{{ pnpm_home }}"
+          changed=1
+        fi
+
+        if [ "$current_bin_dir" != "{{ pnpm_global_bin_dir }}" ]; then
+          pnpm config set global-bin-dir "{{ pnpm_global_bin_dir }}"
+          changed=1
+        fi
+
+        exit "$changed"
+      args:
+        executable: /bin/bash
+      register: pnpm_config
+      changed_when: pnpm_config.rc == 1
+      failed_when: pnpm_config.rc > 1
+
+    - name: Configure OpenClaw shell environment
+      blockinfile:
+        path: "{{ openclaw_home }}/.bashrc"
+        marker: "# {mark} ANSIBLE MANAGED BLOCK - OpenClaw"
+        block: |
+          export PNPM_HOME="{{ pnpm_home }}"
+          export PATH="{{ pnpm_global_bin_dir }}:$PNPM_HOME:$PATH"
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+        create: true
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0644'
+
+    - name: Source .bashrc for openclaw login shells
+      copy:
+        dest: "{{ openclaw_home }}/.bash_profile"
+        owner: "{{ openclaw_user }}"
+        group: "{{ openclaw_group }}"
+        mode: '0644'
+        content: |
+          if [ -f ~/.bashrc ]; then
+            . ~/.bashrc
+          fi
 
     - name: Deploy encrypted API keys to the OpenClaw environment
       template:
@@ -19,54 +120,36 @@
         owner: "{{ openclaw_user }}"
         group: "{{ openclaw_group }}"
         mode: '0600'
+      no_log: true
+
+    - name: Install OpenClaw globally as openclaw user
+      become_user: "{{ openclaw_user }}"
+      environment:
+        HOME: "{{ openclaw_home }}"
+        PNPM_HOME: "{{ pnpm_home }}"
+        PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
+      command: "pnpm install -g {{ openclaw_package }}"
+      register: openclaw_install
+      changed_when: "'Already up to date' not in openclaw_install.stdout"
+
+    - name: Verify OpenClaw CLI installation
+      become_user: "{{ openclaw_user }}"
+      environment:
+        HOME: "{{ openclaw_home }}"
+        PNPM_HOME: "{{ pnpm_home }}"
+        PATH: "{{ pnpm_global_bin_dir }}:{{ pnpm_home }}:/usr/local/bin:/usr/bin:/bin"
+      command: openclaw --version
+      register: openclaw_version
+      changed_when: false
 
     - name: Enable systemd lingering for openclaw user
       command: "loginctl enable-linger {{ openclaw_user }}"
       changed_when: false
 
-    - name: Create user-space systemd directory
-      file:
-        path: "{{ openclaw_home }}/.config/systemd/user"
-        state: directory
-        owner: "{{ openclaw_user }}"
-        group: "{{ openclaw_group }}"
-        mode: '0755'
-
-    - name: Craft the user-space systemd service for OpenClaw
-      copy:
-        dest: "{{ openclaw_home }}/.config/systemd/user/openclaw.service"
-        owner: "{{ openclaw_user }}"
-        group: "{{ openclaw_group }}"
-        content: |
-          [Unit]
-          Description=OpenClaw Autonomous Agent
-          After=network-online.target
-          
-          [Service]
-          Type=simple
-          WorkingDirectory={{ openclaw_home }}
-          # Loads the secure env file
-          EnvironmentFile={{ openclaw_home }}/.env
-          ExecStart=/usr/bin/node /usr/lib/node_modules/openclaw/index.js
-          Restart=always
-          RestartSec=10
-          Environment=NODE_ENV=production
-          
-          [Install]
-          WantedBy=default.target
-
-    - name: Lookup openclaw UID
-      command: "id -u {{ openclaw_user }}"
-      register: openclaw_uid
-      changed_when: false
-
-    - name: Enable and start OpenClaw user service
-      become_user: "{{ openclaw_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ openclaw_uid.stdout }}"
-      systemd:
-        scope: user
-        daemon_reload: yes
-        name: openclaw
-        enabled: yes
-        state: restarted
+    - name: Print onboarding instructions
+      debug:
+        msg:
+          - "OpenClaw CLI installed: {{ openclaw_version.stdout }}"
+          - "Next manual step:"
+          - "sudo -i -u {{ openclaw_user }}"
+          - "openclaw onboard --install-daemon"
