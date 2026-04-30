@@ -29,6 +29,7 @@ After `v0.1`, changes should mostly be bugfixes, small refactors, and documentat
 - Exactly one storage playbook is selected before installing OpenClaw.
 - `10-storage-local.yml` prepares `openclaw_state_dir`.
 - `10b-storage-nfs-bridge.yml` fails early when NAS settings are placeholders.
+- Storage setup manages `/etc/tmpfiles.d/openclaw.conf` so `/dev/shm/openclaw-tmp` is recreated after reboot.
 - `20-openclaw.yml` installs OpenClaw through the pnpm/CLI path.
 - Managed environment is written to `{{ openclaw_state_dir }}/.env`.
 - `OPENCLAW_STATE_DIR` is set for OpenClaw install and interactive `openclaw` shells.
@@ -85,6 +86,7 @@ This is a supported safety behaviour, not a full NFS deployment guarantee.
 - NFS state path is aligned with `openclaw_state_dir`.
 - NFS bridge has an early placeholder guard.
 - Managed env file is written to `{{ openclaw_state_dir }}/.env`.
+- Storage playbooks manage a tmpfiles.d rule for `/dev/shm/openclaw-tmp`.
 
 ## Explicit Non-Goals
 
