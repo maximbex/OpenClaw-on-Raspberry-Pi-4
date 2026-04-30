@@ -20,7 +20,7 @@
         group: "{{ openclaw_group }}"
         mode: '0755'
 
-    - name: Create OpenClaw config directories
+    - name: Create OpenClaw state directories
       file:
         path: "{{ item.path }}"
         state: directory
