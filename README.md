@@ -52,5 +52,5 @@ The next milestone is [v0.1: first reliable Raspberry Pi install](docs/roadmap-t
 
 ## **The Crystalline Dashboard**
 
-Included is a 30-health.yml playbook. Rather than manually parsing logs, running this playbook queries the Pi's thermal output, memory pressure, and NFS write-latency, returning a beautifully formatted ASCII dashboard of the system's operational health.  
+Included is a 30-health.yml playbook. Rather than manually parsing logs, running this playbook queries the Pi's thermal output, memory pressure, NFS mount status, and OpenClaw process state, returning a beautifully formatted ASCII dashboard of the system's operational health.  
 *The PCIe lane breathes. The agent dreams. The architecture holds.*
