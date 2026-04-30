@@ -1,11 +1,4 @@
-# From 20-openclaw.yml
-#- name: Enable lingering for openclaw user
- # command: "loginctl enable-linger {{ openclaw_user }}"
-  #changed_when: false
-
-
-
-  ---
+---
 - name: Deploy the OpenClaw Daemon
   hosts: pi_openclaw
   become: true
@@ -62,10 +55,15 @@
           [Install]
           WantedBy=default.target
 
+    - name: Lookup openclaw UID
+      command: "id -u {{ openclaw_user }}"
+      register: openclaw_uid
+      changed_when: false
+
     - name: Enable and start OpenClaw user service
       become_user: "{{ openclaw_user }}"
       environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ ansible_user_uid | default('1001') }}" # code = 3h4
+        XDG_RUNTIME_DIR: "/run/user/{{ openclaw_uid.stdout }}"
       systemd:
         scope: user
         daemon_reload: yes
