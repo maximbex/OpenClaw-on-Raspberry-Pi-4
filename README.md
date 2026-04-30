@@ -36,6 +36,10 @@ Giving a web-connected LLM agent root access is structurally dissonant.
 5. Execute the symphony:  
    ansible-playbook \-i inventory.ini 00-bootstrap.yml \--ask-vault-pass (Repeat for the remaining playbooks).
 
+## **Official OpenClaw Ansible Triage**
+
+This repository deliberately borrows from the official OpenClaw Ansible installer without becoming a full copy of it. See [docs/official-ansible-adoption-tiers.md](docs/official-ansible-adoption-tiers.md) for the A/B/C/D adoption tiers.
+
 ## **The Crystalline Dashboard**
 
 Included is a 30-health.yml playbook. Rather than manually parsing logs, running this playbook queries the Pi's thermal output, memory pressure, and NFS write-latency, returning a beautifully formatted ASCII dashboard of the system's operational health.  
