@@ -1,0 +1,125 @@
+---
+- name: Preflight Raspberry Pi for OpenClaw
+  hosts: pi_openclaw
+  become: false
+  gather_facts: true
+
+  vars:
+    preflight_require_noninteractive_sudo: false
+    nfs_placeholder_hosts:
+      - ""
+      - "192.168.1.100"
+    package_dns_hosts:
+      - deb.debian.org
+      - deb.nodesource.com
+      - registry.npmjs.org
+      - github.com
+
+  tasks:
+    - name: Assert supported Linux baseline
+      assert:
+        that:
+          - ansible_facts['system'] == 'Linux'
+          - >
+            (ansible_facts['distribution'] == 'Debian' and (ansible_facts['distribution_major_version'] | int) >= 11) or
+            (ansible_facts['distribution'] == 'Ubuntu' and (ansible_facts['distribution_major_version'] | int) >= 20)
+        fail_msg: "Expected Debian 11+ or Ubuntu 20.04+; found {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }}"
+
+    - name: Check whether sudo can run without prompting
+      command: sudo -n id -u
+      register: sudo_noninteractive
+      changed_when: false
+      failed_when: false
+
+    - name: Assert non-interactive sudo when required
+      assert:
+        that:
+          - sudo_noninteractive.rc == 0
+          - sudo_noninteractive.stdout == '0'
+        fail_msg: "Sudo requires a password; run mutating playbooks with --ask-become-pass"
+      when: preflight_require_noninteractive_sudo | bool
+
+    - name: Check modern Raspberry Pi boot config path
+      stat:
+        path: /boot/firmware/config.txt
+      register: boot_firmware_config
+
+    - name: Check legacy Raspberry Pi boot config path
+      stat:
+        path: /boot/config.txt
+      register: boot_legacy_config
+
+    - name: Select active Raspberry Pi boot config path
+      set_fact:
+        raspi_boot_config_path: >-
+          {{ '/boot/firmware/config.txt' if boot_firmware_config.stat.exists else
+             '/boot/config.txt' if boot_legacy_config.stat.exists else '' }}
+
+    - name: Assert Raspberry Pi boot config exists
+      assert:
+        that:
+          - raspi_boot_config_path | length > 0
+        fail_msg: "No Raspberry Pi boot config found at /boot/firmware/config.txt or /boot/config.txt"
+
+    - name: Check root filesystem free space
+      command: df -Pm /
+      register: root_disk
+      changed_when: false
+
+    - name: Calculate root filesystem free MiB
+      set_fact:
+        root_free_mb: "{{ root_disk.stdout_lines[1].split()[3] | int }}"
+
+    - name: Assert enough free space for package installation
+      assert:
+        that:
+          - root_free_mb | int >= 2048
+        fail_msg: "Expected at least 2048 MiB free on /; found {{ root_free_mb }} MiB"
+
+    - name: Check DNS for package and source hosts
+      command: "getent hosts {{ item }}"
+      loop: "{{ package_dns_hosts }}"
+      register: package_dns_results
+      changed_when: false
+      failed_when: false
+
+    - name: Collect package DNS failures
+      set_fact:
+        package_dns_failures: "{{ package_dns_results.results | selectattr('rc', 'ne', 0) | map(attribute='item') | list }}"
+
+    - name: Assert package DNS works
+      assert:
+        that:
+          - package_dns_failures | length == 0
+        fail_msg: "Could not resolve package/source hosts: {{ package_dns_failures | join(', ') }}"
+
+    - name: Check NFS service reachability when NAS host is configured
+      wait_for:
+        host: "{{ nas_host }}"
+        port: 2049
+        timeout: 3
+        state: started
+      register: nfs_port_check
+      changed_when: false
+      failed_when: false
+      when: nas_host not in nfs_placeholder_hosts
+
+    - name: Print preflight summary
+      debug:
+        msg:
+          - "OS: {{ ansible_facts['distribution'] }} {{ ansible_facts['distribution_version'] }} ({{ ansible_facts['architecture'] }})"
+          - "Boot config: {{ raspi_boot_config_path }}"
+          - >-
+            Sudo: {{
+              'passwordless/cached OK' if sudo_noninteractive.rc == 0 and sudo_noninteractive.stdout == '0' else
+              'password required; use --ask-become-pass for mutating playbooks'
+            }}
+          - "Root free space: {{ root_free_mb }} MiB"
+          - "Package DNS: OK"
+          - >-
+            NFS: {{
+              'skipped; nas_host still uses placeholder ' ~ nas_host
+              if nas_host in nfs_placeholder_hosts else
+              'reachable on 2049' if nfs_port_check is defined and nfs_port_check.state is defined else
+              'not reachable on 2049'
+            }}
