@@ -5,13 +5,17 @@
 openclaw_user: openclaw
 openclaw_group: openclaw
 openclaw_home: /home/openclaw
+openclaw_state_dir: "{{ openclaw_home }}/.openclaw"
 
 # ---------------------------------------------------------
 # THE SYNAPTIC BRIDGE (NFS Topology)
 # ---------------------------------------------------------
 nas_host: "192.168.1.100" # Replace with your Synology NAS IP
 nfs_export_path: "/volume1/openclaw-data" # The path on your NAS
-nfs_mount_point: "{{ openclaw_home }}/data"
+nfs_mount_point: "{{ openclaw_state_dir }}"
+nfs_placeholder_hosts:
+  - ""
+  - "192.168.1.100"
 
 # Removed unbound uid/gid variables; ownership is asserted via the filesystem tasks
 nfs_mount_opts: "rw,hard,intr,nconnect=16,rsize=1048576,wsize=1048576,timeo=600,retrans=2"
@@ -28,6 +32,5 @@ zram_algo: zstd
 node_version: "24.x" # Upgraded to current OpenClaw baseline
 openclaw_install_mode: "release"
 openclaw_package: "openclaw@latest"
-openclaw_config_dir: "{{ openclaw_home }}/.openclaw"
 pnpm_home: "{{ openclaw_home }}/.local/share/pnpm"
 pnpm_global_bin_dir: "{{ openclaw_home }}/.local/bin"
