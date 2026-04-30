@@ -1,31 +1,16 @@
-# **\---------------------------------------------------------**
-
-# **MAC OS ARTIFACTS**
-
-# **\---------------------------------------------------------**
-
-.DS\_Store  
-.AppleDouble  
+# macOS artifacts
+.DS_Store
+.AppleDouble
 .LSOverride
 
-# **\---------------------------------------------------------**
+# Ansible output
+.ansible/
+*.retry
+*.log
 
-# **ANSIBLE SPECIFIC**
+# Vaulted secrets
+group_vars/secrets.yml
 
-# **\---------------------------------------------------------**
-
-\*.retry  
-\*.log
-
-# **\---------------------------------------------------------**
-
-# **THE COGNITIVE KEYS (ABSOLUTE PRIORITY)**
-
-# **\---------------------------------------------------------**
-
-group\_vars/secrets.yml
-
-# **Also ignore any backup files your text editor might make**
-
-\*\~  
-\*.swp
+# Editor backups
+*~
+*.swp
