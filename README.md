@@ -31,9 +31,11 @@ Giving a web-connected LLM agent root access is structurally dissonant.
 1. Flash your Raspberry Pi with the 64-bit Pi OS Lite.  
 2. Clone this repository to your control machine.  
 3. Edit inventory.ini and group\_vars/pi\_openclaw.yml with your local IP addresses.  
-4. Create your encrypted vault for your API keys:  
+4. Run the read-only preflight:  
+   ansible-playbook 00-preflight.yml  
+5. Create your encrypted vault for your API keys:  
    ansible-vault create group\_vars/secrets.yml  
-5. Execute the symphony:  
+6. Execute the symphony:  
    ansible-playbook \-i inventory.ini 00-bootstrap.yml \--ask-vault-pass (Repeat for the remaining playbooks).
 
 ## **Official OpenClaw Ansible Triage**
